@@ -6,21 +6,39 @@
             margin: 0; 
             background: #000;
             overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            -webkit-overflow-scrolling: touch;
         }
         canvas { 
             display: block;
+            touch-action: none;
         }
         .blog-link {
             position: fixed;
-            top: 20px;
-            left: 20px;
+            top: 16px;
+            left: 16px;
             color: #666;
             text-decoration: none;
             font-family: -apple-system, system-ui, sans-serif;
             font-size: 14px;
+            padding: 8px;
+            z-index: 1000;
+            /* Increase touch target size */
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
         }
         .blog-link:hover {
             color: #fff;
+        }
+
+        @media (max-width: 768px) {
+            .blog-link {
+                font-size: 16px; /* Larger text on mobile */
+            }
         }
     </style>
 </head>
@@ -35,13 +53,44 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             
-            const scale = Math.min(window.innerWidth / 800, window.innerHeight / 400) * 0.8;
+            // For mobile, check if width is less than height
+            const isMobile = window.innerWidth < window.innerHeight;
+            
+            // Base width and height for the drawing area
+            const baseWidth = 800;
+            const baseHeight = 400;
+            
+            let scale;
+            if (isMobile) {
+                // On mobile, use width as the constraint and adjust height
+                scale = (window.innerWidth / baseWidth) * 0.9; // 90% of screen width
+            } else {
+                // On desktop, fit to whichever dimension is more constraining
+                scale = Math.min(
+                    window.innerWidth / baseWidth,
+                    window.innerHeight / baseHeight
+                ) * 0.8;
+            }
+            
+            // Center the drawing area
             ctx.setTransform(
-                scale, 0, 
-                0, scale, 
-                (window.innerWidth - 800 * scale) / 2, 
-                (window.innerHeight - 400 * scale) / 2
+                scale, 0,
+                0, scale,
+                (window.innerWidth - baseWidth * scale) / 2,
+                (window.innerHeight - baseHeight * scale) / 2
             );
+        }
+
+        // Add touch event listeners
+        canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+        canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+        // Add meta viewport tag if not present
+        if (!document.querySelector('meta[name="viewport"]')) {
+            const meta = document.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+            document.head.appendChild(meta);
         }
         window.addEventListener('resize', resize);
         resize();
