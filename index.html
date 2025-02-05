@@ -1,157 +1,299 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drawing Robots</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <style>
-        body {
+        body { 
+            margin: 0; 
             background: #000;
-            margin: 0;
             overflow: hidden;
         }
-        .nav-link {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            font-size: 14px;
-            letter-spacing: 0.3px;
+        canvas { 
+            display: block;
         }
-        .canvas-container {
+        .blog-link {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            top: 20px;
+            left: 20px;
+            color: #666;
+            text-decoration: none;
+            font-family: -apple-system, system-ui, sans-serif;
+            font-size: 14px;
         }
-        .canvas-container svg {
-            max-height: 90vh;
-            width: auto;
+        .blog-link:hover {
+            color: #fff;
         }
     </style>
 </head>
 <body>
-    <nav class="fixed top-0 left-0 p-6 z-50">
-        <a href="/blog" class="nav-link text-gray-500 hover:text-white transition-colors duration-200">
-            blog →
-        </a>
-    </nav>
+    <a href="/blog" class="blog-link">blog →</a>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
 
-    <div id="root" class="canvas-container"></div>
-
-    <script type="text/babel">
-        const Robot = ({ gcode, color, ARM_LENGTH = 25 }) => {
-            // ... [Previous Robot component code remains the same] ...
-        };
-
-        const GCodeRobots = () => {
-            const programs = [
-                {
-                    color: "#4CAF50",
-                    gcode: `
-                        ; Left robot - Square spiral
-                        G92 X200 Y200
-                        G0 X120 Y120
-                        M3
-                        G1 X280 Y120
-                        G1 X280 Y280
-                        G1 X120 Y280
-                        G1 X120 Y120
-                        M5
-                        G0 X140 Y140
-                        M3
-                        G1 X260 Y140
-                        G1 X260 Y260
-                        G1 X140 Y260
-                        G1 X140 Y140
-                        M5
-                        G0 X160 Y160
-                        M3
-                        G1 X240 Y160
-                        G1 X240 Y240
-                        G1 X160 Y240
-                        G1 X160 Y160
-                        M5
-                        G0 X180 Y180
-                        M3
-                        G1 X220 Y180
-                        G1 X220 Y220
-                        G1 X180 Y220
-                        G1 X180 Y180
-                        M5
-                    `
-                },
-                {
-                    color: "#2196F3",
-                    gcode: `
-                        ; Center robot - Geometric pattern
-                        G92 X400 Y200
-                        G0 X350 Y150
-                        M3
-                        G1 X450 Y150
-                        G1 X400 Y250
-                        G1 X350 Y150
-                        M5
-                        G0 X375 Y175
-                        M3
-                        G1 X425 Y175
-                        G1 X400 Y225
-                        G1 X375 Y175
-                        M5
-                        G0 X350 Y200
-                        M3
-                        G1 X450 Y200
-                        M5
-                    `
-                },
-                {
-                    color: "#FFC107",
-                    gcode: `
-                        ; Right robot - Circular pattern
-                        G92 X600 Y200
-                        G0 X550 Y200
-                        M3
-                        G1 X575 Y150
-                        G1 X600 Y175
-                        G1 X625 Y150
-                        G1 X650 Y200
-                        G1 X625 Y250
-                        G1 X600 Y225
-                        G1 X575 Y250
-                        G1 X550 Y200
-                        M5
-                        G0 X575 Y200
-                        M3
-                        G1 X625 Y200
-                        M5
-                        G0 X600 Y175
-                        M3
-                        G1 X600 Y225
-                        M5
-                    `
-                }
-            ];
-
-            return (
-                <svg viewBox="0 0 800 400" className="h-full">
-                    <rect width="800" height="400" fill="#000" />
-                    {programs.map((program, index) => (
-                        <Robot
-                            key={index}
-                            gcode={program.gcode}
-                            color={program.color}
-                        />
-                    ))}
-                </svg>
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const scale = Math.min(window.innerWidth / 800, window.innerHeight / 400) * 0.8;
+            ctx.setTransform(
+                scale, 0, 
+                0, scale, 
+                (window.innerWidth - 800 * scale) / 2, 
+                (window.innerHeight - 400 * scale) / 2
             );
-        };
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-        ReactDOM.render(<GCodeRobots />, document.getElementById('root'));
+        class Robot {
+            constructor(color) {
+                this.tipPosition = { x: 400, y: 200 };
+                this.center = { x: 400, y: 200 };
+                this.color = color;
+                this.armLength = 25;
+                this.isDrawing = false;
+                this.path = [];
+                this.commands = [];
+                this.commandIndex = 0;
+                this.moveStart = null;
+                this.moveTarget = null;
+                this.VELOCITY = 200; // pixels per second
+            }
+
+            parseGCode(gcode) {
+                this.commands = gcode.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && !line.startsWith(';'))
+                    .map(line => {
+                        const parts = line.split(' ');
+                        const command = parts[0];
+                        const params = {};
+                        parts.slice(1).forEach(part => {
+                            const [key, value] = [part[0], parseFloat(part.slice(1))];
+                            params[key] = value;
+                        });
+                        return { command, params };
+                    });
+                this.commandIndex = 0;
+            }
+
+            calculateBodyPosition() {
+                const angle = Math.atan2(
+                    this.tipPosition.y - this.center.y,
+                    this.tipPosition.x - this.center.x
+                );
+                return {
+                    x: this.tipPosition.x + this.armLength * Math.cos(angle),
+                    y: this.tipPosition.y + this.armLength * Math.sin(angle),
+                    angle: angle + Math.PI
+                };
+            }
+
+            getDistance(p1, p2) {
+                return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            }
+
+            update(timestamp) {
+                if (this.commandIndex >= this.commands.length) return;
+
+                const command = this.commands[this.commandIndex];
+
+                if (command.command === 'G92') {
+                    if (command.params.X !== undefined) {
+                        this.center.x = command.params.X;
+                        this.tipPosition.x = command.params.X;
+                    }
+                    if (command.params.Y !== undefined) {
+                        this.center.y = command.params.Y;
+                        this.tipPosition.y = command.params.Y;
+                    }
+                    this.commandIndex++;
+                } else if (command.command === 'M3') {
+                    this.isDrawing = true;
+                    this.commandIndex++;
+                } else if (command.command === 'M5') {
+                    this.isDrawing = false;
+                    this.commandIndex++;
+                } else if (command.command === 'G0' || command.command === 'G1') {
+                    if (!this.moveStart) {
+                        this.moveStart = { ...this.tipPosition };
+                        this.moveTarget = {
+                            x: command.params.X ?? this.tipPosition.x,
+                            y: command.params.Y ?? this.tipPosition.y
+                        };
+                        this.moveStartTime = timestamp;
+                        this.moveDistance = this.getDistance(this.moveStart, this.moveTarget);
+                    }
+
+                    const elapsed = (timestamp - this.moveStartTime) / 1000; // Convert to seconds
+                    const distanceCovered = this.VELOCITY * elapsed;
+                    const progress = Math.min(1, distanceCovered / this.moveDistance);
+
+                    this.tipPosition.x = this.moveStart.x + (this.moveTarget.x - this.moveStart.x) * progress;
+                    this.tipPosition.y = this.moveStart.y + (this.moveTarget.y - this.moveStart.y) * progress;
+
+                    if (this.isDrawing) {
+                        if (this.path.length === 0 || 
+                            Math.abs(this.path[this.path.length-1].x - this.tipPosition.x) > 2 ||
+                            Math.abs(this.path[this.path.length-1].y - this.tipPosition.y) > 2) {
+                            this.path.push({...this.tipPosition});
+                        }
+                    }
+
+                    if (progress >= 1) {
+                        this.commandIndex++;
+                        this.moveStart = null;
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.clearRect(this.tipPosition.x - 50, this.tipPosition.y - 50, 100, 100);
+
+                // Draw path
+                if (this.path.length > 1) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(this.path[0].x, this.path[0].y);
+                    for (let i = 1; i < this.path.length; i++) {
+                        ctx.lineTo(this.path[i].x, this.path[i].y);
+                    }
+                    ctx.stroke();
+                }
+
+                // Draw center point
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.arc(this.center.x, this.center.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Calculate body position
+                const bodyPos = this.calculateBodyPosition();
+
+                // Draw robot
+                ctx.save();
+                ctx.translate(bodyPos.x, bodyPos.y);
+                ctx.rotate(bodyPos.angle);
+
+                // Body
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.roundRect(-15, -15, 30, 30, 5);
+                ctx.fill();
+
+                // Center pivot
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Arm
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(this.armLength, 0);
+                ctx.stroke();
+
+                // Drawing tip
+                ctx.translate(this.armLength, 0);
+                ctx.fillStyle = this.isDrawing ? '#ff0' : '#666';
+                ctx.strokeStyle = this.isDrawing ? '#ff0' : '#666';
+                
+                ctx.beginPath();
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-3, -3);
+                ctx.lineTo(3, 3);
+                ctx.moveTo(-3, 3);
+                ctx.lineTo(3, -3);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        const robots = [
+            {
+                robot: new Robot('#4CAF50'),
+                gcode: `
+                    G92 X200 Y200
+                    G0 X100 Y100
+                    M3
+                    G1 X300 Y100
+                    G1 X300 Y300
+                    G1 X100 Y300
+                    G1 X100 Y100
+                    M5
+                    G0 X125 Y125
+                    M3
+                    G1 X275 Y125
+                    G1 X275 Y275
+                    G1 X125 Y275
+                    G1 X125 Y125
+                    M5
+                `
+            },
+            {
+                robot: new Robot('#2196F3'),
+                gcode: `
+                    G92 X400 Y200
+                    G0 X400 Y100
+                    M3
+                    G1 X450 Y200
+                    G1 X350 Y150
+                    G1 X450 Y150
+                    G1 X350 Y200
+                    G1 X400 Y100
+                    M5
+                `
+            },
+            {
+                robot: new Robot('#FFC107'),
+                gcode: `
+                    G92 X600 Y200
+                    G0 X550 Y150
+                    M3
+                    G1 X650 Y150
+                    G1 X600 Y250
+                    G1 X550 Y150
+                    M5
+                    G0 X575 Y175
+                    M3
+                    G1 X625 Y175
+                    G1 X600 Y225
+                    G1 X575 Y175
+                    M5
+                    G0 X550 Y200
+                    M3
+                    G1 X650 Y200
+                    M5
+                `
+            }
+        ];
+
+        robots.forEach(({ robot, gcode }) => robot.parseGCode(gcode));
+
+        function animate(timestamp) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 800, 400);
+
+            robots.forEach(({ robot }) => {
+                robot.update(timestamp);
+                robot.draw(ctx);
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
     </script>
 </body>
 </html>
