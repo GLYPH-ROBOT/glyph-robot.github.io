@@ -3,20 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Building Size Estimator</title>
+    <title>Print Area Estimator</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet CSS and JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- React and ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    
-    <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
@@ -37,17 +30,21 @@
             border: none;
         }
 
-        #map {
-            z-index: 0;
-        }
-
-        /* Dark mode map styles */
         .leaflet-tile {
             filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
         }
+
+        .center-marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            pointer-events: none;
+        }
     </style>
 </head>
-<body class="min-h-screen p-4 bg-gray-900 transition-colors duration-200">
+<body class="min-h-screen p-4 bg-gray-900">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -56,47 +53,24 @@
             const [isDragging, setIsDragging] = React.useState(false);
             const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
             const [location, setLocation] = React.useState({ lat: 37.7749, lng: -122.4194 });
-            const [price, setPrice] = React.useState(0);
             const [map, setMap] = React.useState(null);
-            const [marker, setMarker] = React.useState(null);
 
-            // Initialize map
-            React.useEffect(() => {
-                if (map) map.remove();
-
-                const mapInstance = L.map('map').setView([39.8283, -98.5795], 4);
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(mapInstance);
-
-                // SF marker
-                L.circleMarker([37.7749, -122.4194], {
-                    color: '#3b82f6',
-                    fillColor: '#3b82f6',
-                    fillOpacity: 1,
-                    radius: 8
-                }).addTo(mapInstance)
-                    .bindPopup('San Francisco');
-
-                // Location marker
-                const locationMarker = L.marker([location.lat, location.lng], {
-                    draggable: true
-                }).addTo(mapInstance);
-
-                locationMarker.on('dragend', (e) => {
-                    const pos = e.target.getLatLng();
-                    setLocation({ lat: pos.lat, lng: pos.lng });
-                });
-
-                mapInstance.on('click', (e) => {
-                    locationMarker.setLatLng(e.latlng);
-                    setLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
-                });
-
-                setMap(mapInstance);
-                setMarker(locationMarker);
-            }, []);
+            // Calculate fees
+            const calculateFees = () => {
+                const printArea = size.width * size.height * size.depth;
+                const distance = calculateDistance(37.7749, -122.4194, location.lat, location.lng);
+                const miles = distance * 0.621371; // Convert km to miles
+                
+                const fees = {
+                    printArea: printArea * 10, // $10 per cubic meter
+                    material: printArea * 15, // $15 per cubic meter
+                    distance: miles * 2, // $2 per mile
+                    labor: Math.ceil(printArea / 10) * 50 // $50 per hour, 1 hour per 10 cubic meters
+                };
+                
+                fees.total = Object.values(fees).reduce((a, b) => a + b, 0);
+                return fees;
+            };
 
             const calculateDistance = (lat1, lon1, lat2, lon2) => {
                 const R = 6371;
@@ -110,13 +84,32 @@
                 return R * c;
             };
 
-            const calculatePrice = () => {
-                const volume = size.width * size.height * size.depth;
-                const distance = calculateDistance(37.7749, -122.4194, location.lat, location.lng);
-                const basePrice = volume * 10;
-                const distanceFactor = Math.max(1, Math.log(distance + 1));
-                return basePrice * distanceFactor;
-            };
+            React.useEffect(() => {
+                if (map) map.remove();
+
+                const mapInstance = L.map('map').setView([39.8283, -98.5795], 4);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(mapInstance);
+
+                // SF reference marker
+                L.circleMarker([37.7749, -122.4194], {
+                    color: '#3b82f6',
+                    fillColor: '#3b82f6',
+                    fillOpacity: 1,
+                    radius: 8
+                }).addTo(mapInstance)
+                    .bindPopup('San Francisco');
+
+                // Update location when map moves
+                mapInstance.on('move', () => {
+                    const center = mapInstance.getCenter();
+                    setLocation({ lat: center.lat, lng: center.lng });
+                });
+
+                setMap(mapInstance);
+            }, []);
 
             const handleMouseDown = (e) => {
                 setIsDragging(true);
@@ -147,73 +140,97 @@
                 setIsDragging(false);
             };
 
-            React.useEffect(() => {
-                setPrice(calculatePrice());
-            }, [size, location]);
-
-            React.useEffect(() => {
-                if (marker) {
-                    marker.setLatLng([location.lat, location.lng]);
-                }
-            }, [location, marker]);
-
-            const cubeStyle = {
-                width: `${size.width * 10}px`,
-                height: `${size.height * 10}px`,
-                transform: `rotateX(45deg) rotateZ(45deg)`,
-                transformStyle: 'preserve-3d',
-                position: 'relative',
-                cursor: isDragging ? 'grabbing' : 'grab'
-            };
+            const fees = calculateFees();
+            const distance = calculateDistance(37.7749, -122.4194, location.lat, location.lng);
+            const miles = (distance * 0.621371).toFixed(0);
 
             return (
-                <div className="max-w-md mx-auto bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-                    <div className="p-6">
-                        <h1 className="text-2xl font-bold text-center mb-6 text-white">
-                            Choose Your Building Size
-                        </h1>
-                        
-                        <div className="flex flex-col items-center space-y-6">
-                            <div 
-                                className="relative w-64 h-64 flex items-center justify-center touch-none"
-                                onMouseDown={handleMouseDown}
-                                onMouseMove={handleMouseMove}
-                                onMouseUp={handleMouseUp}
-                                onMouseLeave={handleMouseUp}
-                                onTouchStart={handleMouseDown}
-                                onTouchMove={handleMouseMove}
-                                onTouchEnd={handleMouseUp}
-                            >
+                <div className="max-w-2xl mx-auto bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-6 space-y-8">
+                        {/* Step 1 */}
+                        <div>
+                            <h2 className="text-xl font-bold text-white mb-4">1. Select your print area</h2>
+                            <div className="space-y-4">
                                 <div 
-                                    className="bg-blue-400/20 border-2 border-blue-400" 
-                                    style={cubeStyle}
+                                    className="relative w-64 h-64 mx-auto flex items-center justify-center touch-none"
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseUp}
+                                    onTouchStart={handleMouseDown}
+                                    onTouchMove={handleMouseMove}
+                                    onTouchEnd={handleMouseUp}
                                 >
-                                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-blue-400">
-                                        ↔
+                                    <div 
+                                        className="bg-blue-400/20 border-2 border-blue-400" 
+                                        style={{
+                                            width: `${size.width * 10}px`,
+                                            height: `${size.height * 10}px`,
+                                            transform: `rotateX(45deg) rotateZ(45deg)`,
+                                            transformStyle: 'preserve-3d',
+                                            position: 'relative',
+                                            cursor: isDragging ? 'grabbing' : 'grab'
+                                        }}
+                                    >
+                                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-blue-400">
+                                            ↔
+                                        </div>
                                     </div>
                                 </div>
+                                <div className="text-center space-x-4 text-gray-100">
+                                    <span>Width: {size.width.toFixed(1)}m</span>
+                                    <span>Height: {size.height.toFixed(1)}m</span>
+                                    <span>Depth: {size.depth.toFixed(1)}m</span>
+                                </div>
                             </div>
+                        </div>
 
-                            <div className="text-center space-y-2 text-gray-100">
-                                <p>Width: {size.width.toFixed(1)}m</p>
-                                <p>Height: {size.height.toFixed(1)}m</p>
-                                <p>Depth: {size.depth.toFixed(1)}m</p>
+                        {/* Step 2 */}
+                        <div>
+                            <h2 className="text-xl font-bold text-white mb-4">2. Select your location</h2>
+                            <div className="relative w-full h-64">
+                                <div id="map" className="w-full h-full rounded-lg"></div>
+                                <div className="center-marker">
+                                    <div className="w-6 h-6 text-red-500">📍</div>
+                                </div>
                             </div>
+                        </div>
 
-                            <div className="w-full space-y-2">
-                                <label className="block text-sm font-medium text-gray-100">
-                                    Location:
-                                </label>
-                                <div id="map" className="w-full h-64 rounded-lg"></div>
-                            </div>
-
-                            <div className="text-center">
-                                <p className="text-3xl font-bold text-white">
-                                    ${price.toLocaleString(undefined, {maximumFractionDigits: 2})}
+                        {/* Step 3 */}
+                        <div>
+                            <h2 className="text-xl font-bold text-white mb-4">3. Instant quote</h2>
+                            <div className="space-y-4">
+                                <p className="text-4xl font-bold text-center text-white">
+                                    ${fees.total.toLocaleString(undefined, {maximumFractionDigits: 2})}
                                 </p>
-                                <p className="text-sm text-gray-400">
-                                    Distance from SF: {calculateDistance(37.7749, -122.4194, location.lat, location.lng).toFixed(0)} km
-                                </p>
+                                
+                                <table className="w-full text-gray-100">
+                                    <tbody className="divide-y divide-gray-700">
+                                        <tr>
+                                            <td className="py-2">Print Area ({(size.width * size.height * size.depth).toFixed(1)} m³ × $10)</td>
+                                            <td className="py-2 text-right">${fees.printArea.toLocaleString()}</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="py-2">Material Cost ({(size.width * size.height * size.depth).toFixed(1)} m³ × $15)</td>
+                                            <td className="py-2 text-right">${fees.material.toLocaleString()}</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="py-2">Distance ({miles} miles × $2)</td>
+                                            <td className="py-2 text-right">${fees.distance.toLocaleString()}</td>
+                                        </tr>
+                                        <tr>
+                                            <td className="py-2">Labor ({Math.ceil((size.width * size.height * size.depth) / 10)} hours × $50)</td>
+                                            <td className="py-2 text-right">${fees.labor.toLocaleString()}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <button 
+                                    className="w-full py-3 px-4 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg transition-colors"
+                                    onClick={() => alert('Submit deposit clicked!')}
+                                >
+                                    Submit Deposit
+                                </button>
                             </div>
                         </div>
                     </div>
