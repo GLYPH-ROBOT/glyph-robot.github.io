@@ -6,6 +6,8 @@
     <title>Blog</title>
     <!-- Import marked for Markdown parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <!-- Import Inter font -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/inter-ui/3.19.3/inter.css">
     <style>
         /* Reset and base styles */
         * {
@@ -15,109 +17,188 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background-color: #18181b;
-            color: #fafafa;
-            line-height: 1.6;
-            padding: 1rem;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(to bottom, #0f172a, #1e293b);
+            color: #f8fafc;
+            line-height: 1.7;
+            min-height: 100vh;
+            letter-spacing: -0.011em;
         }
 
         /* Container styles */
         .container {
-            max-width: 42rem;
+            max-width: 44rem;
             margin: 0 auto;
-            padding: 1rem;
+            padding: 2rem 1.5rem;
         }
 
         /* Back button styles */
         .back-button {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            color: #a1a1aa;
+            gap: 0.75rem;
+            color: #94a3b8;
             text-decoration: none;
-            margin-bottom: 2rem;
+            margin-bottom: 3rem;
             cursor: pointer;
             background: none;
             border: none;
-            font-size: 1rem;
+            font-size: 0.925rem;
+            font-weight: 500;
+            padding: 0.5rem 0.75rem;
+            margin-left: -0.75rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
         }
 
         .back-button:hover {
-            color: #fafafa;
+            color: #f8fafc;
+            background-color: rgba(148, 163, 184, 0.1);
         }
 
         /* Blog content styles */
         .blog-content {
-            background-color: #27272a;
-            padding: 2rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background-color: rgba(30, 41, 59, 0.5);
+            padding: 3rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
         }
 
         /* Markdown content styles */
         .blog-content h1 {
-            font-size: 2rem;
-            margin-bottom: 1.5rem;
-            color: #fafafa;
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: #f8fafc;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: -0.03em;
         }
 
         .blog-content h2 {
-            font-size: 1.5rem;
+            font-size: 1.75rem;
+            margin: 2.5rem 0 1.25rem;
+            color: #f8fafc;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .blog-content h3 {
+            font-size: 1.25rem;
             margin: 2rem 0 1rem;
-            color: #fafafa;
+            color: #f8fafc;
+            font-weight: 600;
         }
 
         .blog-content p {
-            margin-bottom: 1rem;
-            color: #d4d4d8;
+            margin-bottom: 1.5rem;
+            color: #cbd5e1;
+            font-size: 1.0625rem;
         }
 
         .blog-content a {
-            color: #60a5fa;
+            color: #93c5fd;
             text-decoration: none;
+            border-bottom: 1px solid rgba(147, 197, 253, 0.2);
+            transition: all 0.2s ease;
         }
 
         .blog-content a:hover {
-            text-decoration: underline;
+            color: #bfdbfe;
+            border-bottom-color: rgba(147, 197, 253, 0.4);
         }
 
         .blog-content code {
-            background-color: #3f3f46;
+            background-color: rgba(51, 65, 85, 0.5);
             padding: 0.2rem 0.4rem;
             border-radius: 0.25rem;
-            font-family: monospace;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.875em;
+            color: #e2e8f0;
         }
 
         .blog-content pre {
-            background-color: #3f3f46;
-            padding: 1rem;
-            border-radius: 0.5rem;
+            background-color: rgba(51, 65, 85, 0.5);
+            padding: 1.25rem;
+            border-radius: 0.75rem;
             overflow-x: auto;
-            margin: 1rem 0;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .blog-content pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.875rem;
+            line-height: 1.7;
+            color: #e2e8f0;
         }
 
         .blog-content ul, .blog-content ol {
-            margin: 1rem 0;
-            padding-left: 2rem;
+            margin: 1.5rem 0;
+            padding-left: 1.25rem;
+            color: #cbd5e1;
         }
 
         .blog-content li {
-            margin: 0.5rem 0;
+            margin: 0.75rem 0;
+            padding-left: 0.5rem;
+        }
+
+        .blog-content blockquote {
+            border-left: 3px solid #93c5fd;
+            padding-left: 1.5rem;
+            margin: 2rem 0;
+            color: #94a3b8;
+            font-style: italic;
         }
 
         /* Loading state */
         .loading {
             text-align: center;
-            color: #a1a1aa;
-            padding: 2rem;
+            color: #94a3b8;
+            padding: 3rem;
+            font-size: 0.925rem;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .blog-content {
+                padding: 2rem 1.5rem;
+            }
+
+            .blog-content h1 {
+                font-size: 2rem;
+            }
+
+            .blog-content h2 {
+                font-size: 1.5rem;
+            }
+
+            .blog-content p {
+                font-size: 1rem;
+            }
+        }
+
+        /* Selection styling */
+        ::selection {
+            background-color: rgba(147, 197, 253, 0.2);
+            color: #f8fafc;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <button class="back-button" onclick="window.history.back()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" 
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" 
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 12H5"/>
                 <path d="M12 19l-7-7 7-7"/>
