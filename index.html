@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Drawing</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-900 min-h-screen">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 p-4 z-50">
+        <a href="/blog" class="text-gray-400 hover:text-white transition-colors text-sm">
+            blog →
+        </a>
+    </nav>
+
+    <!-- Main content -->
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const Robot = ({ gcode, color, ARM_LENGTH = 25 }) => {
+            const [tipPosition, setTipPosition] = React.useState({ x: 400, y: 200 });
+            const [center, setCenter] = React.useState({ x: 400, y: 200 });
+            const [drawnPath, setDrawnPath] = React.useState([]);
+            const [currentCommandIndex, setCurrentCommandIndex] = React.useState(0);
+            const [isDrawing, setIsDrawing] = React.useState(false);
+
+            const commands = gcode.split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith(';'))
+                .map(line => {
+                    const parts = line.split(' ');
+                    const command = parts[0];
+                    const params = {};
+                    parts.slice(1).forEach(part => {
+                        const [key, value] = [part[0], parseFloat(part.slice(1))];
+                        params[key] = value;
+                    });
+                    return { command, params };
+                });
+
+            const calculateBodyPosition = (tipPos) => {
+                const angle = Math.atan2(tipPos.y - center.y, tipPos.x - center.x);
+                return {
+                    x: tipPos.x + ARM_LENGTH * Math.cos(angle),
+                    y: tipPos.y + ARM_LENGTH * Math.sin(angle),
+                    angle: angle + Math.PI
+                };
+            };
+
+            React.useEffect(() => {
+                let startTime = null;
+                let animationFrameId = null;
+
+                const animate = (timestamp) => {
+                    if (!startTime) startTime = timestamp;
+                    const elapsed = timestamp - startTime;
+
+                    if (currentCommandIndex < commands.length) {
+                        const { command, params } = commands[currentCommandIndex];
+                        const duration = command === 'G0' ? 500 : 1000;
+                        const progress = Math.min(1, elapsed / duration);
+
+                        if (command === 'G92') {
+                            if (params.X !== undefined && params.Y !== undefined) {
+                                setCenter({ x: params.X, y: params.Y });
+                                setTipPosition({ x: params.X, y: params.Y });
+                            }
+                            setCurrentCommandIndex(prev => prev + 1);
+                            startTime = null;
+                        } else if (command === 'M3') {
+                            setIsDrawing(true);
+                            setCurrentCommandIndex(prev => prev + 1);
+                            startTime = null;
+                        } else if (command === 'M5') {
+                            setIsDrawing(false);
+                            setCurrentCommandIndex(prev => prev + 1);
+                            startTime = null;
+                        } else if (command === 'G0' || command === 'G1') {
+                            const startPos = tipPosition;
+                            const targetX = params.X ?? startPos.x;
+                            const targetY = params.Y ?? startPos.y;
+
+                            const newPos = {
+                                x: startPos.x + (targetX - startPos.x) * progress,
+                                y: startPos.y + (targetY - startPos.y) * progress
+                            };
+
+                            setTipPosition(newPos);
+
+                            if (isDrawing) {
+                                setDrawnPath(prev => {
+                                    if (prev.length === 0 || 
+                                        Math.abs(prev[prev.length - 1].x - newPos.x) > 2 ||
+                                        Math.abs(prev[prev.length - 1].y - newPos.y) > 2) {
+                                        return [...prev, newPos];
+                                    }
+                                    return prev;
+                                });
+                            }
+
+                            if (progress >= 1) {
+                                setCurrentCommandIndex(prev => prev + 1);
+                                startTime = null;
+                            }
+                        }
+
+                        animationFrameId = requestAnimationFrame(animate);
+                    }
+                };
+
+                animationFrameId = requestAnimationFrame(animate);
+
+                return () => {
+                    if (animationFrameId) {
+                        cancelAnimationFrame(animationFrameId);
+                    }
+                };
+            }, [currentCommandIndex, commands.length, isDrawing]);
+
+            const bodyPos = calculateBodyPosition(tipPosition);
+
+            return (
+                <>
+                    <circle
+                        cx={center.x}
+                        cy={center.y}
+                        r="3"
+                        fill={color}
+                        opacity="0.5"
+                    />
+
+                    {drawnPath.length > 1 && (
+                        <path
+                            d={`M ${drawnPath[0].x} ${drawnPath[0].y} 
+                                ${drawnPath.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')}`}
+                            stroke={color}
+                            strokeWidth="2"
+                            fill="none"
+                        />
+                    )}
+
+                    <g transform={`translate(${bodyPos.x}, ${bodyPos.y}) rotate(${bodyPos.angle * 180 / Math.PI})`}>
+                        <rect
+                            x="-15"
+                            y="-15"
+                            width="30"
+                            height="30"
+                            fill={color}
+                            rx="5"
+                        />
+                        
+                        <circle
+                            r="4"
+                            fill="#fff"
+                        />
+
+                        <line
+                            x1="0"
+                            y1="0"
+                            x2={ARM_LENGTH}
+                            y2="0"
+                            stroke="#fff"
+                            strokeWidth="3"
+                        />
+                        
+                        <g transform={`translate(${ARM_LENGTH}, 0)`}>
+                            <circle
+                                r="4"
+                                fill={isDrawing ? "#ff0" : "#666"}
+                            />
+                            <line
+                                x1="-3"
+                                y1="-3"
+                                x2="3"
+                                y2="3"
+                                stroke={isDrawing ? "#ff0" : "#666"}
+                                strokeWidth="2"
+                            />
+                            <line
+                                x1="-3"
+                                y1="3"
+                                x2="3"
+                                y2="-3"
+                                stroke={isDrawing ? "#ff0" : "#666"}
+                                strokeWidth="2"
+                            />
+                        </g>
+                    </g>
+                </>
+            );
+        };
+
+        const GCodeRobots = () => {
+            const programs = [
+                {
+                    color: "#4CAF50",
+                    gcode: `
+                        ; Left robot draws a spiral square
+                        G92 X200 Y200
+                        G0 X100 Y100
+                        M3
+                        G1 X300 Y100
+                        G1 X300 Y300
+                        G1 X100 Y300
+                        G1 X100 Y100
+                        M5
+                        G0 X125 Y125
+                        M3
+                        G1 X275 Y125
+                        G1 X275 Y275
+                        G1 X125 Y275
+                        G1 X125 Y125
+                        M5
+                        G0 X150 Y150
+                        M3
+                        G1 X250 Y150
+                        G1 X250 Y250
+                        G1 X150 Y250
+                        G1 X150 Y150
+                        M5
+                        G0 X175 Y175
+                        M3
+                        G1 X225 Y175
+                        G1 X225 Y225
+                        G1 X175 Y225
+                        G1 X175 Y175
+                        M5
+                    `
+                },
+                {
+                    color: "#2196F3",
+                    gcode: `
+                        ; Center robot draws a star pattern
+                        G92 X400 Y200
+                        G0 X400 Y100
+                        M3
+                        G1 X450 Y200
+                        G1 X350 Y150
+                        G1 X450 Y150
+                        G1 X350 Y200
+                        G1 X400 Y100
+                        M5
+                        G0 X400 Y300
+                        M3
+                        G1 X350 Y200
+                        G1 X450 Y250
+                        G1 X350 Y250
+                        G1 X450 Y200
+                        G1 X400 Y300
+                        M5
+                    `
+                },
+                {
+                    color: "#FFC107",
+                    gcode: `
+                        ; Right robot draws overlapping circles
+                        G92 X600 Y200
+                        G0 X550 Y150
+                        M3
+                        G1 X575 Y150
+                        G1 X600 Y175
+                        G1 X625 Y150
+                        G1 X650 Y175
+                        G1 X650 Y200
+                        G1 X625 Y225
+                        G1 X600 Y200
+                        G1 X575 Y225
+                        G1 X550 Y200
+                        G1 X550 Y175
+                        G1 X575 Y150
+                        M5
+                        G0 X550 Y200
+                        M3
+                        G1 X575 Y175
+                        G1 X600 Y200
+                        G1 X625 Y175
+                        G1 X650 Y200
+                        G1 X650 Y225
+                        G1 X625 Y250
+                        G1 X600 Y225
+                        G1 X575 Y250
+                        G1 X550 Y225
+                        G1 X550 Y200
+                        M5
+                    `
+                }
+            ];
+
+            return (
+                <div className="w-full h-screen flex items-center justify-center">
+                    <svg viewBox="0 0 800 400" className="w-full max-w-4xl">
+                        {programs.map((program, index) => (
+                            <Robot
+                                key={index}
+                                gcode={program.gcode}
+                                color={program.color}
+                            />
+                        ))}
+                    </svg>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<GCodeRobots />, document.getElementById('root'));
+    </script>
+</body>
+</html>
