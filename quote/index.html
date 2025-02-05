@@ -13,9 +13,45 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        .isometric-cube {
+        .cube-container {
+            perspective: 1000px;
+        }
+        
+        .cube {
             transform-style: preserve-3d;
-            transform: rotateX(45deg) rotateZ(45deg);
+            transform: rotateX(-20deg) rotateY(45deg);
+            position: relative;
+            transition: transform 0.2s;
+        }
+        
+        .cube-face {
+            position: absolute;
+            border: 2px solid rgba(96, 165, 250, 0.5);
+            background: rgba(96, 165, 250, 0.1);
+        }
+        
+        .cube-face.front {
+            transform: translateZ(var(--half-depth));
+        }
+        
+        .cube-face.back {
+            transform: translateZ(calc(var(--half-depth) * -1));
+        }
+        
+        .cube-face.right {
+            transform: rotateY(90deg) translateZ(var(--half-width));
+        }
+        
+        .cube-face.left {
+            transform: rotateY(-90deg) translateZ(var(--half-width));
+        }
+        
+        .cube-face.top {
+            transform: rotateX(90deg) translateZ(var(--half-height));
+        }
+        
+        .cube-face.bottom {
+            transform: rotateX(-90deg) translateZ(var(--half-height));
         }
         
         .leaflet-container {
@@ -48,6 +84,33 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        const Cube = ({ size, isDragging }) => {
+            const scale = 10; // Scale factor for visual size
+            const width = size.width * scale;
+            const height = size.height * scale;
+            const depth = size.depth * scale;
+
+            const style = {
+                width: `${width}px`,
+                height: `${height}px`,
+                '--half-width': `${width/2}px`,
+                '--half-height': `${height/2}px`,
+                '--half-depth': `${depth/2}px`,
+                cursor: isDragging ? 'grabbing' : 'grab'
+            };
+
+            return (
+                <div className="cube" style={style}>
+                    <div className="cube-face front" style={{ width: `${width}px`, height: `${height}px` }}></div>
+                    <div className="cube-face back" style={{ width: `${width}px`, height: `${height}px` }}></div>
+                    <div className="cube-face right" style={{ width: `${depth}px`, height: `${height}px` }}></div>
+                    <div className="cube-face left" style={{ width: `${depth}px`, height: `${height}px` }}></div>
+                    <div className="cube-face top" style={{ width: `${width}px`, height: `${depth}px` }}></div>
+                    <div className="cube-face bottom" style={{ width: `${width}px`, height: `${depth}px` }}></div>
+                </div>
+            );
+        };
+
         const EstimateTool = () => {
             const [size, setSize] = React.useState({ width: 5, height: 5, depth: 5 });
             const [isDragging, setIsDragging] = React.useState(false);
@@ -57,15 +120,14 @@
 
             // Calculate fees
             const calculateFees = () => {
-                const printArea = size.width * size.height * size.depth;
+                const volume = size.width * size.height * size.depth;
                 const distance = calculateDistance(37.7749, -122.4194, location.lat, location.lng);
-                const miles = distance * 0.621371; // Convert km to miles
+                const miles = distance * 0.621371;
                 
                 const fees = {
-                    printArea: printArea * 10, // $10 per cubic meter
-                    material: printArea * 15, // $15 per cubic meter
-                    distance: miles * 2, // $2 per mile
-                    labor: Math.ceil(printArea / 10) * 50 // $50 per hour, 1 hour per 10 cubic meters
+                    material: volume * 15, // $15 per cubic meter
+                    distance: miles * 2,   // $2 per mile
+                    labor: Math.ceil(volume / 10) * 50  // $50 per hour, 1 hour per 10m³
                 };
                 
                 fees.total = Object.values(fees).reduce((a, b) => a + b, 0);
@@ -93,7 +155,6 @@
                     attribution: '© OpenStreetMap contributors'
                 }).addTo(mapInstance);
 
-                // SF reference marker
                 L.circleMarker([37.7749, -122.4194], {
                     color: '#3b82f6',
                     fillColor: '#3b82f6',
@@ -102,7 +163,6 @@
                 }).addTo(mapInstance)
                     .bindPopup('San Francisco');
 
-                // Update location when map moves
                 mapInstance.on('move', () => {
                     const center = mapInstance.getCenter();
                     setLocation({ lat: center.lat, lng: center.lng });
@@ -147,12 +207,11 @@
             return (
                 <div className="max-w-2xl mx-auto bg-gray-800 rounded-xl shadow-lg overflow-hidden">
                     <div className="p-6 space-y-8">
-                        {/* Step 1 */}
                         <div>
                             <h2 className="text-xl font-bold text-white mb-4">1. Select your print area</h2>
                             <div className="space-y-4">
                                 <div 
-                                    className="relative w-64 h-64 mx-auto flex items-center justify-center touch-none"
+                                    className="relative w-64 h-64 mx-auto flex items-center justify-center touch-none cube-container"
                                     onMouseDown={handleMouseDown}
                                     onMouseMove={handleMouseMove}
                                     onMouseUp={handleMouseUp}
@@ -161,21 +220,7 @@
                                     onTouchMove={handleMouseMove}
                                     onTouchEnd={handleMouseUp}
                                 >
-                                    <div 
-                                        className="bg-blue-400/20 border-2 border-blue-400" 
-                                        style={{
-                                            width: `${size.width * 10}px`,
-                                            height: `${size.height * 10}px`,
-                                            transform: `rotateX(45deg) rotateZ(45deg)`,
-                                            transformStyle: 'preserve-3d',
-                                            position: 'relative',
-                                            cursor: isDragging ? 'grabbing' : 'grab'
-                                        }}
-                                    >
-                                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-blue-400">
-                                            ↔
-                                        </div>
-                                    </div>
+                                    <Cube size={size} isDragging={isDragging} />
                                 </div>
                                 <div className="text-center space-x-4 text-gray-100">
                                     <span>Width: {size.width.toFixed(1)}m</span>
@@ -185,7 +230,6 @@
                             </div>
                         </div>
 
-                        {/* Step 2 */}
                         <div>
                             <h2 className="text-xl font-bold text-white mb-4">2. Select your location</h2>
                             <div className="relative w-full h-64">
@@ -196,7 +240,6 @@
                             </div>
                         </div>
 
-                        {/* Step 3 */}
                         <div>
                             <h2 className="text-xl font-bold text-white mb-4">3. Instant quote</h2>
                             <div className="space-y-4">
@@ -206,10 +249,6 @@
                                 
                                 <table className="w-full text-gray-100">
                                     <tbody className="divide-y divide-gray-700">
-                                        <tr>
-                                            <td className="py-2">Print Area ({(size.width * size.height * size.depth).toFixed(1)} m³ × $10)</td>
-                                            <td className="py-2 text-right">${fees.printArea.toLocaleString()}</td>
-                                        </tr>
                                         <tr>
                                             <td className="py-2">Material Cost ({(size.width * size.height * size.depth).toFixed(1)} m³ × $15)</td>
                                             <td className="py-2 text-right">${fees.material.toLocaleString()}</td>
