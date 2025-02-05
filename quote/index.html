@@ -1,0 +1,208 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Move, MapPin } from 'lucide-react';
+
+const EstimateTool = () => {
+  const [size, setSize] = useState({ width: 5, height: 5, depth: 5 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [location, setLocation] = useState({ lat: 37.7749, lng: -122.4194 }); // SF coordinates
+  const [price, setPrice] = useState(0);
+  const [map, setMap] = useState(null);
+  const [marker, setMarker] = useState(null);
+
+  // Initialize map
+  useEffect(() => {
+    // Only import Leaflet client-side
+    if (typeof window !== 'undefined') {
+      import('leaflet').then((L) => {
+        // Remove existing map instance if it exists
+        if (map) map.remove();
+
+        // Create map
+        const mapInstance = L.map('map').setView([39.8283, -98.5795], 4);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors'
+        }).addTo(mapInstance);
+
+        // Add SF marker
+        L.circleMarker([37.7749, -122.4194], {
+          color: '#3b82f6',
+          fillColor: '#3b82f6',
+          fillOpacity: 1,
+          radius: 8
+        }).addTo(mapInstance)
+          .bindPopup('San Francisco');
+
+        // Add location marker
+        const locationMarker = L.marker([location.lat, location.lng], {
+          draggable: true
+        }).addTo(mapInstance);
+
+        // Update location when marker is dragged
+        locationMarker.on('dragend', (e) => {
+          const pos = e.target.getLatLng();
+          setLocation({ lat: pos.lat, lng: pos.lng });
+        });
+
+        // Update marker when clicking on map
+        mapInstance.on('click', (e) => {
+          locationMarker.setLatLng(e.latlng);
+          setLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+        });
+
+        setMap(mapInstance);
+        setMarker(locationMarker);
+      });
+    }
+  }, []);
+
+  // Calculate distance from SF
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Calculate price based on size and distance
+  const calculatePrice = () => {
+    const volume = size.width * size.height * size.depth;
+    const distance = calculateDistance(37.7749, -122.4194, location.lat, location.lng);
+    const basePrice = volume * 10; // $10 per cubic meter
+    const distanceFactor = Math.max(1, Math.log(distance + 1));
+    return basePrice * distanceFactor;
+  };
+
+  // Handle cube drag interactions
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX || e.touches?.[0].clientX,
+      y: e.clientY || e.touches?.[0].clientY
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    
+    const currentX = e.clientX || e.touches?.[0].clientX;
+    const currentY = e.clientY || e.touches?.[0].clientY;
+    const deltaX = currentX - dragStart.x;
+    const deltaY = currentY - dragStart.y;
+
+    // Update size based on drag direction
+    setSize(prev => ({
+      width: Math.max(1, prev.width + deltaX * 0.05),
+      height: Math.max(1, prev.height - deltaY * 0.05),
+      depth: Math.max(1, prev.depth + (deltaX - deltaY) * 0.025)
+    }));
+
+    setDragStart({ x: currentX, y: currentY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Update price when size or location changes
+  useEffect(() => {
+    setPrice(calculatePrice());
+  }, [size, location]);
+
+  // Update marker position when location changes
+  useEffect(() => {
+    if (marker) {
+      marker.setLatLng([location.lat, location.lng]);
+    }
+  }, [location, marker]);
+
+  // Isometric cube CSS
+  const cubeStyle = {
+    width: `${size.width * 10}px`,
+    height: `${size.height * 10}px`,
+    transform: `rotateX(45deg) rotateZ(45deg)`,
+    transformStyle: 'preserve-3d',
+    position: 'relative',
+    cursor: isDragging ? 'grabbing' : 'grab'
+  };
+
+  return (
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle className="text-center">Choose Your Building Size</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col items-center space-y-6">
+          {/* Isometric cube */}
+          <div 
+            className="relative w-64 h-64 flex items-center justify-center touch-none"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleMouseDown}
+            onTouchMove={handleMouseMove}
+            onTouchEnd={handleMouseUp}
+          >
+            <div className="bg-blue-500/20 border-2 border-blue-500" style={cubeStyle}>
+              <Move className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-blue-500" />
+            </div>
+          </div>
+
+          {/* Size display */}
+          <div className="text-center space-y-2">
+            <p>Width: {size.width.toFixed(1)}m</p>
+            <p>Height: {size.height.toFixed(1)}m</p>
+            <p>Depth: {size.depth.toFixed(1)}m</p>
+          </div>
+
+          {/* Map */}
+          <div className="w-full space-y-2">
+            <label className="block text-sm font-medium">Location:</label>
+            <div id="map" className="w-full h-64 rounded-lg z-0"></div>
+          </div>
+
+          {/* Price display */}
+          <div className="text-center">
+            <p className="text-3xl font-bold">${price.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
+            <p className="text-sm text-gray-500">
+              Distance from SF: {calculateDistance(37.7749, -122.4194, location.lat, location.lng).toFixed(0)} km
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Add Leaflet CSS
+const LeafletStyles = () => (
+  <style jsx global>{`
+    .leaflet-container {
+      height: 100%;
+      width: 100%;
+      border-radius: 0.5rem;
+    }
+    .leaflet-div-icon {
+      background: transparent;
+      border: none;
+    }
+  `}</style>
+);
+
+const EstimateToolWithStyles = () => (
+  <>
+    <LeafletStyles />
+    <EstimateTool />
+  </>
+);
+
+export default EstimateToolWithStyles;
