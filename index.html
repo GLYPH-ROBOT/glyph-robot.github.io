@@ -2,25 +2,148 @@
 <html>
 <head>
     <style>
-        body { 
+        /* Reset default margins/padding */
+        * {
             margin: 0; 
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body { 
+            margin: 0;
             background: #111;
-            overflow: hidden;
+            /* Allow the page to scroll for the info section */
+            font-family: Arial, sans-serif;
+            color: #fff;
+        }
+
+        /* Fixed container for the canvas animation background */
+        .animation-background {
             position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1; /* Send behind all other content */
+        }
+
+        /* Main animation canvas */
+        #canvas { 
+            display: block;
             width: 100%;
             height: 100%;
         }
-        canvas { 
-            display: block;
-            position: absolute;
+
+        /* Top navigation with a blog link in the top-left corner */
+        .top-nav {
+            position: fixed;
             top: 0;
             left: 0;
+            z-index: 999; /* Above everything else */
+            padding: 1rem;
+        }
+
+        .top-nav a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        .top-nav a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Scrollable information section */
+        .info-section {
+            /* Provide space so that the user sees the animation first,
+               then scrolls down to see the content */
+            padding-top: 100vh; 
+            padding-bottom: 5rem;
+            max-width: 900px;
+            margin: 0 auto;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        .info-section h2 {
+            font-size: 2em;
+            margin-bottom: 1rem;
+        }
+
+        .info-section p {
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        /* Big quote button */
+        .quote-button {
+            display: inline-block;
+            margin-top: 2rem;
+            padding: 1rem 2rem;
+            background-color: #ff6b6b; /* or another accent color */
+            color: #fff;
+            text-decoration: none;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        .quote-button:hover {
+            background-color: #ff4b4b; /* Darken on hover */
         }
     </style>
 </head>
 <body>
-    <canvas id="canvas"></canvas>
+    <!-- Fixed top-left navigation -->
+    <div class="top-nav">
+        <a href="/blog">Blog</a>
+    </div>
+
+    <!-- Fixed animation background with your existing canvas -->
+    <div class="animation-background">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Scrollable content describing your project -->
+   <div class="info-section">
+    <h2>Revolutionizing Construction with Multi-Robot 3D Concrete Printing</h2>
+    <p>
+        Our innovative 3D concrete printing system uses multiple robots 
+        that work together on an almost limitless surface. With our unique 
+        “close enough” technology, the robots stay perfectly in sync, allowing 
+        us to create large and complex designs quickly and accurately.
+    </p>
+    <p>
+        At the core of this system is a custom extruder that deposits 
+        high-strength concrete in precise layers, eliminating the need for 
+        traditional cinder blocks. Even better, our printer setup is fully 
+        mobile, so we can bring it straight to your construction site, 
+        reducing both material transport and labor expenses.
+    </p>
+    <p>
+        By automating tasks normally handled by highly skilled masons, our 
+        multi-robot approach speeds up production while maintaining top-notch 
+        quality. From intricate architectural elements to complete building 
+        shells, our method is faster, more flexible, and more cost-effective 
+        than conventional concrete solutions.
+    </p>
+
+    <!-- Big quote button -->
+    <a class="quote-button" href="/quote">Get a Quote</a>
+</div>
+
+
     <script>
+        // ---------------------------
+        //  Your existing JavaScript
+        // ---------------------------
+
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
@@ -29,13 +152,15 @@
         const pctx = persistentCanvas.getContext('2d');
 
         function resize() {
-            // Set canvas sizes
+            // Full window size for the background
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            persistentCanvas.width = 800;  // Fixed size for drawing area
+
+            // The persistent drawing area remains 800x400
+            persistentCanvas.width = 800;
             persistentCanvas.height = 400;
 
-            // Calculate scale to fit the 800x400 drawing area in the window
+            // Calculate scale to fit the 800x400 drawing area
             const scale = Math.min(
                 window.innerWidth / 800,
                 window.innerHeight / 400
@@ -305,7 +430,6 @@
             }
         }
 
-        // Create three robots with different colors
         // Grid state management
         class GridManager {
             constructor(columns, rows) {
@@ -347,7 +471,7 @@
 
         const gridManager = new GridManager(8, 4);
 
-        // Create robots after grid manager
+        // Create robots
         const robots = [
             new Robot('#FF6B6B'),  // Red
             new Robot('#4ECDC4'),  // Teal
