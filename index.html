@@ -271,22 +271,14 @@
 
         const robots = [
             {
-                robot: new Robot('#4CAF50'),
+                robot: new Robot('#E0474C'),
                 gcode: `
                     G92 X200 Y200
                     G0 X100 Y100
                     M3
                     G1 X300 Y100
-                    G1 X300 Y300
-                    G1 X100 Y300
+                    G1 X200 Y300
                     G1 X100 Y100
-                    M5
-                    G0 X125 Y125
-                    M3
-                    G1 X275 Y125
-                    G1 X275 Y275
-                    G1 X125 Y275
-                    G1 X125 Y125
                     M5
                 `
             },
@@ -294,13 +286,28 @@
                 robot: new Robot('#2196F3'),
                 gcode: `
                     G92 X400 Y200
-                    G0 X400 Y100
+                    G0 X450 Y150
                     M3
-                    G1 X450 Y200
+                    G1 X447 Y165
+                    G1 X440 Y180
+                    G1 X430 Y193
+                    G1 X415 Y203
+                    G1 X400 Y208
+                    G1 X385 Y203
+                    G1 X370 Y193
+                    G1 X360 Y180
+                    G1 X353 Y165
                     G1 X350 Y150
+                    G1 X353 Y135
+                    G1 X360 Y120
+                    G1 X370 Y107
+                    G1 X385 Y97
+                    G1 X400 Y92
+                    G1 X415 Y97
+                    G1 X430 Y107
+                    G1 X440 Y120
+                    G1 X447 Y135
                     G1 X450 Y150
-                    G1 X350 Y200
-                    G1 X400 Y100
                     M5
                 `
             },
@@ -311,18 +318,9 @@
                     G0 X550 Y150
                     M3
                     G1 X650 Y150
-                    G1 X600 Y250
+                    G1 X650 Y250
+                    G1 X550 Y250
                     G1 X550 Y150
-                    M5
-                    G0 X575 Y175
-                    M3
-                    G1 X625 Y175
-                    G1 X600 Y225
-                    G1 X575 Y175
-                    M5
-                    G0 X550 Y200
-                    M3
-                    G1 X650 Y200
                     M5
                 `
             }
