@@ -4,100 +4,65 @@
     <style>
         body { 
             margin: 0; 
-            background: #000;
+            background: #111;
             overflow: hidden;
             position: fixed;
             width: 100%;
             height: 100%;
-            -webkit-overflow-scrolling: touch;
         }
         canvas { 
             display: block;
-            touch-action: none;
-        }
-        .blog-link {
-            position: fixed;
-            top: 16px;
-            left: 16px;
-            color: #666;
-            text-decoration: none;
-            font-family: -apple-system, system-ui, sans-serif;
-            font-size: 14px;
-            padding: 8px;
-            z-index: 1000;
-            /* Increase touch target size */
-            min-width: 44px;
-            min-height: 44px;
-            display: flex;
-            align-items: center;
-        }
-        .blog-link:hover {
-            color: #fff;
-        }
-
-        @media (max-width: 768px) {
-            .blog-link {
-                font-size: 16px; /* Larger text on mobile */
-            }
+            position: absolute;
+            top: 0;
+            left: 0;
         }
     </style>
 </head>
 <body>
-    <a href="/blog" class="blog-link">blog →</a>
     <canvas id="canvas"></canvas>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
+        // Create a second canvas for persistent drawings
+        const persistentCanvas = document.createElement('canvas');
+        const pctx = persistentCanvas.getContext('2d');
+
         function resize() {
+            // Set canvas sizes
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            
-            // For mobile, check if width is less than height
-            const isMobile = window.innerWidth < window.innerHeight;
-            
-            // Base width and height for the drawing area
-            const baseWidth = 800;
-            const baseHeight = 400;
-            
-            let scale;
-            if (isMobile) {
-                // On mobile, use width as the constraint and adjust height
-                scale = (window.innerWidth / baseWidth) * 0.9; // 90% of screen width
-            } else {
-                // On desktop, fit to whichever dimension is more constraining
-                scale = Math.min(
-                    window.innerWidth / baseWidth,
-                    window.innerHeight / baseHeight
-                ) * 0.8;
-            }
-            
+            persistentCanvas.width = 800;  // Fixed size for drawing area
+            persistentCanvas.height = 400;
+
+            // Calculate scale to fit the 800x400 drawing area in the window
+            const scale = Math.min(
+                window.innerWidth / 800,
+                window.innerHeight / 400
+            ) * 0.8;  // 80% of full size for margins
+
             // Center the drawing area
+            const offsetX = (window.innerWidth - 800 * scale) / 2;
+            const offsetY = (window.innerHeight - 400 * scale) / 2;
+
+            // Set transform for main canvas
             ctx.setTransform(
                 scale, 0,
                 0, scale,
-                (window.innerWidth - baseWidth * scale) / 2,
-                (window.innerHeight - baseHeight * scale) / 2
+                offsetX, offsetY
             );
+
+            // Clear persistent canvas with dark background
+            pctx.fillStyle = '#111';
+            pctx.fillRect(0, 0, 800, 400);
         }
 
-        // Add touch event listeners
-        canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
-        canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-
-        // Add meta viewport tag if not present
-        if (!document.querySelector('meta[name="viewport"]')) {
-            const meta = document.createElement('meta');
-            meta.name = 'viewport';
-            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-            document.head.appendChild(meta);
-        }
         window.addEventListener('resize', resize);
         resize();
 
         class Robot {
             constructor(color) {
-                this.tipPosition = { x: 400, y: 200 };
+                this.tipPosition = { x: 400, y: 200 };  // Center of 800x400 area
                 this.center = { x: 400, y: 200 };
                 this.color = color;
                 this.armLength = 25;
@@ -107,7 +72,110 @@
                 this.commandIndex = 0;
                 this.moveStart = null;
                 this.moveTarget = null;
-                this.VELOCITY = 200; // pixels per second
+                this.VELOCITY = 200;
+            }
+
+            getDistance(p1, p2) {
+                return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            }
+
+            update(timestamp) {
+                if (this.commandIndex >= this.commands.length) {
+                    // Clear the path before starting a new shape
+                    this.path = [];
+                    // Generate and start a new random shape
+                    this.parseGCode(this.generateRandomShape());
+                    return;
+                }
+
+                const command = this.commands[this.commandIndex];
+
+                if (command.command === 'G0' || command.command === 'G1') {
+                    if (!this.moveStart) {
+                        this.moveStart = { ...this.tipPosition };
+                        this.moveTarget = {
+                            x: command.params.X ?? this.tipPosition.x,
+                            y: command.params.Y ?? this.tipPosition.y
+                        };
+                        this.moveStartTime = timestamp;
+                        this.moveDistance = this.getDistance(this.moveStart, this.moveTarget);
+                    }
+
+                    const elapsed = (timestamp - this.moveStartTime) / 1000;
+                    const distanceCovered = this.VELOCITY * elapsed;
+                    const progress = Math.min(1, distanceCovered / this.moveDistance);
+
+                    this.tipPosition.x = this.moveStart.x + (this.moveTarget.x - this.moveStart.x) * progress;
+                    this.tipPosition.y = this.moveStart.y + (this.moveTarget.y - this.moveStart.y) * progress;
+
+                    if (this.isDrawing) {
+                        this.path.push({...this.tipPosition});
+                        
+                        // Draw the new line segment to persistent canvas
+                        if (this.path.length > 1) {
+                            const lastPoint = this.path[this.path.length - 2];
+                            const newPoint = this.path[this.path.length - 1];
+                            
+                            pctx.strokeStyle = this.color;
+                            pctx.lineWidth = 2;
+                            pctx.beginPath();
+                            pctx.moveTo(lastPoint.x, lastPoint.y);
+                            pctx.lineTo(newPoint.x, newPoint.y);
+                            pctx.stroke();
+                        }
+                    }
+
+                    if (progress >= 1) {
+                        this.commandIndex++;
+                        this.moveStart = null;
+                    }
+                } else if (command.command === 'M3') {
+                    this.isDrawing = true;
+                    this.commandIndex++;
+                } else if (command.command === 'M5') {
+                    this.isDrawing = false;
+                    this.commandIndex++;
+                }
+            }
+
+            draw(ctx) {
+                // Draw robot body
+                const angle = Math.atan2(
+                    this.tipPosition.y - this.center.y,
+                    this.tipPosition.x - this.center.x
+                );
+                const bodyPos = {
+                    x: this.tipPosition.x + this.armLength * Math.cos(angle),
+                    y: this.tipPosition.y + this.armLength * Math.sin(angle),
+                    angle: angle + Math.PI
+                };
+
+                ctx.save();
+                ctx.translate(bodyPos.x, bodyPos.y);
+                ctx.rotate(bodyPos.angle);
+
+                // Body
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.roundRect(-15, -15, 30, 30, 5);
+                ctx.fill();
+
+                // Arm
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(this.armLength, 0);
+                ctx.stroke();
+
+                // Drawing tip
+                ctx.translate(this.armLength, 0);
+                ctx.fillStyle = this.isDrawing ? '#ff0' : '#666';
+                ctx.beginPath();
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
             }
 
             parseGCode(gcode) {
@@ -127,216 +195,185 @@
                 this.commandIndex = 0;
             }
 
-            calculateBodyPosition() {
-                const angle = Math.atan2(
-                    this.tipPosition.y - this.center.y,
-                    this.tipPosition.x - this.center.x
-                );
+            // Shape generators
+            generateCircle(centerX, centerY, radius = 30, rotation = 0) {
+                let gcode = `M5\nG0 X${centerX} Y${centerY - radius}\nM3\n`;
+                const points = 32;  // Number of segments for the circle
+                
+                for (let i = 0; i <= points; i++) {
+                    const angle = (i / points) * Math.PI * 2 + rotation;
+                    const x = centerX + radius * Math.sin(angle);
+                    const y = centerY - radius * Math.cos(angle);
+                    gcode += `G1 X${x.toFixed(1)} Y${y.toFixed(1)}\n`;
+                }
+                
+                return gcode + 'M5';
+            }
+
+            generateSquare(centerX, centerY, size = 60, rotation = 0) {
+                const halfSize = size / 2;
+                const points = [
+                    [-halfSize, -halfSize],
+                    [halfSize, -halfSize],
+                    [halfSize, halfSize],
+                    [-halfSize, halfSize],
+                    [-halfSize, -halfSize]
+                ];
+
+                let gcode = `M5\n`;
+                
+                // Move to first point
+                const firstX = centerX + points[0][0] * Math.cos(rotation) - points[0][1] * Math.sin(rotation);
+                const firstY = centerY + points[0][0] * Math.sin(rotation) + points[0][1] * Math.cos(rotation);
+                gcode += `G0 X${firstX.toFixed(1)} Y${firstY.toFixed(1)}\nM3\n`;
+                
+                // Draw the square
+                for (let i = 1; i < points.length; i++) {
+                    const x = centerX + points[i][0] * Math.cos(rotation) - points[i][1] * Math.sin(rotation);
+                    const y = centerY + points[i][0] * Math.sin(rotation) + points[i][1] * Math.cos(rotation);
+                    gcode += `G1 X${x.toFixed(1)} Y${y.toFixed(1)}\n`;
+                }
+                
+                return gcode + 'M5';
+            }
+
+            generateTriangle(centerX, centerY, size = 60, rotation = 0) {
+                const radius = size / 2;
+                const points = [];
+                
+                // Generate three points for the triangle
+                for (let i = 0; i < 3; i++) {
+                    const angle = (i * 2 * Math.PI / 3) + rotation;
+                    points.push([
+                        centerX + radius * Math.cos(angle),
+                        centerY + radius * Math.sin(angle)
+                    ]);
+                }
+                
+                let gcode = `M5\nG0 X${points[0][0].toFixed(1)} Y${points[0][1].toFixed(1)}\nM3\n`;
+                
+                // Draw to each point and back to start
+                for (let i = 1; i < points.length; i++) {
+                    gcode += `G1 X${points[i][0].toFixed(1)} Y${points[i][1].toFixed(1)}\n`;
+                }
+                gcode += `G1 X${points[0][0].toFixed(1)} Y${points[0][1].toFixed(1)}\n`;
+                
+                return gcode + 'M5';
+            }
+
+            getGridPosition() {
+                const gridSize = 80;  // Space between grid points
+                const startX = 120;   // Left margin
+                const startY = 80;    // Top margin
+                
+                // Get next available position from grid manager
+                const pos = gridManager.getRandomAvailablePosition();
+                if (!pos) {
+                    // If grid is full, robot should stop
+                    this.isDone = true;
+                    return null;
+                }
+                
                 return {
-                    x: this.tipPosition.x + this.armLength * Math.cos(angle),
-                    y: this.tipPosition.y + this.armLength * Math.sin(angle),
-                    angle: angle + Math.PI
+                    x: startX + pos.col * gridSize,
+                    y: startY + pos.row * gridSize
                 };
             }
 
-            getDistance(p1, p2) {
-                return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-            }
-
-            update(timestamp) {
-                if (this.commandIndex >= this.commands.length) return;
-
-                const command = this.commands[this.commandIndex];
-
-                if (command.command === 'G92') {
-                    if (command.params.X !== undefined) {
-                        this.center.x = command.params.X;
-                        this.tipPosition.x = command.params.X;
-                    }
-                    if (command.params.Y !== undefined) {
-                        this.center.y = command.params.Y;
-                        this.tipPosition.y = command.params.Y;
-                    }
-                    this.commandIndex++;
-                } else if (command.command === 'M3') {
-                    this.isDrawing = true;
-                    this.commandIndex++;
-                } else if (command.command === 'M5') {
-                    this.isDrawing = false;
-                    this.commandIndex++;
-                } else if (command.command === 'G0' || command.command === 'G1') {
-                    if (!this.moveStart) {
-                        this.moveStart = { ...this.tipPosition };
-                        this.moveTarget = {
-                            x: command.params.X ?? this.tipPosition.x,
-                            y: command.params.Y ?? this.tipPosition.y
-                        };
-                        this.moveStartTime = timestamp;
-                        this.moveDistance = this.getDistance(this.moveStart, this.moveTarget);
-                    }
-
-                    const elapsed = (timestamp - this.moveStartTime) / 1000; // Convert to seconds
-                    const distanceCovered = this.VELOCITY * elapsed;
-                    const progress = Math.min(1, distanceCovered / this.moveDistance);
-
-                    this.tipPosition.x = this.moveStart.x + (this.moveTarget.x - this.moveStart.x) * progress;
-                    this.tipPosition.y = this.moveStart.y + (this.moveTarget.y - this.moveStart.y) * progress;
-
-                    if (this.isDrawing) {
-                        if (this.path.length === 0 || 
-                            Math.abs(this.path[this.path.length-1].x - this.tipPosition.x) > 2 ||
-                            Math.abs(this.path[this.path.length-1].y - this.tipPosition.y) > 2) {
-                            this.path.push({...this.tipPosition});
-                        }
-                    }
-
-                    if (progress >= 1) {
-                        this.commandIndex++;
-                        this.moveStart = null;
-                    }
-                }
-            }
-
-            draw(ctx) {
-                ctx.clearRect(this.tipPosition.x - 50, this.tipPosition.y - 50, 100, 100);
-
-                // Draw path
-                if (this.path.length > 1) {
-                    ctx.beginPath();
-                    ctx.strokeStyle = this.color;
-                    ctx.lineWidth = 2;
-                    ctx.moveTo(this.path[0].x, this.path[0].y);
-                    for (let i = 1; i < this.path.length; i++) {
-                        ctx.lineTo(this.path[i].x, this.path[i].y);
-                    }
-                    ctx.stroke();
-                }
-
-                // Draw center point
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = 0.5;
-                ctx.beginPath();
-                ctx.arc(this.center.x, this.center.y, 3, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.globalAlpha = 1;
-
-                // Calculate body position
-                const bodyPos = this.calculateBodyPosition();
-
-                // Draw robot
-                ctx.save();
-                ctx.translate(bodyPos.x, bodyPos.y);
-                ctx.rotate(bodyPos.angle);
-
-                // Body
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.roundRect(-15, -15, 30, 30, 5);
-                ctx.fill();
-
-                // Center pivot
-                ctx.fillStyle = '#fff';
-                ctx.beginPath();
-                ctx.arc(0, 0, 4, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Arm
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(this.armLength, 0);
-                ctx.stroke();
-
-                // Drawing tip
-                ctx.translate(this.armLength, 0);
-                ctx.fillStyle = this.isDrawing ? '#ff0' : '#666';
-                ctx.strokeStyle = this.isDrawing ? '#ff0' : '#666';
+            generateRandomShape() {
+                const pos = this.getGridPosition();
+                if (!pos) return null; // No available positions
                 
-                ctx.beginPath();
-                ctx.arc(0, 0, 4, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(-3, -3);
-                ctx.lineTo(3, 3);
-                ctx.moveTo(-3, 3);
-                ctx.lineTo(3, -3);
-                ctx.stroke();
-
-                ctx.restore();
+                const rotation = Math.random() * Math.PI * 2;  // Random rotation
+                
+                // Then set this as our new center
+                this.center = { x: pos.x, y: pos.y };
+                
+                // Random shape type
+                const shapeType = Math.floor(Math.random() * 3);
+                
+                switch (shapeType) {
+                    case 0:
+                        return this.generateCircle(pos.x, pos.y, 30, rotation);
+                    case 1:
+                        return this.generateSquare(pos.x, pos.y, 60, rotation);
+                    case 2:
+                        return this.generateTriangle(pos.x, pos.y, 60, rotation);
+                    default:
+                        return null;
+                }
             }
         }
 
-        const robots = [
-            {
-                robot: new Robot('#E0474C'),
-                gcode: `
-                    G92 X200 Y200
-                    G0 X100 Y100
-                    M3
-                    G1 X300 Y100
-                    G1 X200 Y300
-                    G1 X100 Y100
-                    M5
-                `
-            },
-            {
-                robot: new Robot('#2196F3'),
-                gcode: `
-                    G92 X400 Y200
-                    G0 X450 Y150
-                    M3
-                    G1 X447 Y165
-                    G1 X440 Y180
-                    G1 X430 Y193
-                    G1 X415 Y203
-                    G1 X400 Y208
-                    G1 X385 Y203
-                    G1 X370 Y193
-                    G1 X360 Y180
-                    G1 X353 Y165
-                    G1 X350 Y150
-                    G1 X353 Y135
-                    G1 X360 Y120
-                    G1 X370 Y107
-                    G1 X385 Y97
-                    G1 X400 Y92
-                    G1 X415 Y97
-                    G1 X430 Y107
-                    G1 X440 Y120
-                    G1 X447 Y135
-                    G1 X450 Y150
-                    M5
-                `
-            },
-            {
-                robot: new Robot('#FFC107'),
-                gcode: `
-                    G92 X600 Y200
-                    G0 X550 Y150
-                    M3
-                    G1 X650 Y150
-                    G1 X650 Y250
-                    G1 X550 Y250
-                    G1 X550 Y150
-                    M5
-                `
+        // Create three robots with different colors
+        // Grid state management
+        class GridManager {
+            constructor(columns, rows) {
+                this.columns = columns;
+                this.rows = rows;
+                this.occupiedSpaces = new Set();
+                this.totalSpaces = columns * rows;
             }
+
+            isOccupied(col, row) {
+                return this.occupiedSpaces.has(`${col},${row}`);
+            }
+
+            occupy(col, row) {
+                this.occupiedSpaces.add(`${col},${row}`);
+            }
+
+            getRandomAvailablePosition() {
+                if (this.occupiedSpaces.size >= this.totalSpaces) {
+                    return null; // Grid is full
+                }
+
+                // Get all available positions
+                const available = [];
+                for (let col = 0; col < this.columns; col++) {
+                    for (let row = 0; row < this.rows; row++) {
+                        if (!this.isOccupied(col, row)) {
+                            available.push({col, row});
+                        }
+                    }
+                }
+
+                // Return a random available position
+                const pos = available[Math.floor(Math.random() * available.length)];
+                this.occupy(pos.col, pos.row);
+                return pos;
+            }
+        }
+
+        const gridManager = new GridManager(8, 4);
+
+        // Create robots after grid manager
+        const robots = [
+            new Robot('#FF6B6B'),  // Red
+            new Robot('#4ECDC4'),  // Teal
+            new Robot('#45B7D1')   // Blue
         ];
 
-        robots.forEach(({ robot, gcode }) => robot.parseGCode(gcode));
+        // Start each robot with a random shape
+        robots.forEach(robot => {
+            robot.parseGCode(robot.generateRandomShape());
+        });
 
+        // Animation loop
         function animate(timestamp) {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, 800, 400);
-
-            robots.forEach(({ robot }) => {
+            // Clear main canvas
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the persistent canvas first
+            ctx.drawImage(persistentCanvas, 0, 0);
+            
+            // Update and draw all robots
+            robots.forEach(robot => {
                 robot.update(timestamp);
                 robot.draw(ctx);
             });
-
+            
             requestAnimationFrame(animate);
         }
 
