@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { 
+            margin: 0; 
+            background: #111;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        canvas { 
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        class GridManager {
+            constructor() {
+                this.updateGridSize();
+                this.shapes = new Map(); // Store shape data with timestamps
+            }
+
+            updateGridSize() {
+                this.cellSize = 180;
+                this.columns = Math.ceil(window.innerWidth / this.cellSize);
+                this.rows = Math.ceil(window.innerHeight / this.cellSize);
+                this.cellWidth = window.innerWidth / this.columns;
+                this.cellHeight = window.innerHeight / this.rows;
+            }
+
+            isOccupied(col, row) {
+                const key = `${col},${row}`;
+                if (!this.shapes.has(key)) return false;
+                
+                const timestamp = this.shapes.get(key).timestamp;
+                const age = Date.now() - timestamp;
+                
+                if (age > 15000) { // Remove after 15 seconds
+                    this.shapes.delete(key);
+                    return false;
+                }
+                return true;
+            }
+
+            addShape(col, row, path, color) {
+                this.shapes.set(`${col},${row}`, {
+                    path: path,
+                    color: color,
+                    timestamp: Date.now()
+                });
+            }
+
+            getOpacity(timestamp) {
+                const age = Date.now() - timestamp;
+                if (age < 10000) return 1;  // Full opacity for 10 seconds
+                return Math.max(0, 1 - ((age - 10000) / 5000)); // Fade over 5 seconds
+            }
+
+            getRandomAvailablePosition() {
+                const available = [];
+                for (let col = 0; col < this.columns; col++) {
+                    for (let row = 0; row < this.rows; row++) {
+                        if (!this.isOccupied(col, row)) {
+                            available.push({col, row});
+                        }
+                    }
+                }
+
+                if (available.length === 0) {
+                    // Find and remove oldest shape
+                    let oldest = Date.now();
+                    let oldestKey = null;
+                    this.shapes.forEach((data, key) => {
+                        if (data.timestamp < oldest) {
+                            oldest = data.timestamp;
+                            oldestKey = key;
+                        }
+                    });
+                    if (oldestKey) {
+                        const [col, row] = oldestKey.split(',').map(Number);
+                        this.shapes.delete(oldestKey);
+                        return {col, row};
+                    }
+                }
+
+                return available[Math.floor(Math.random() * available.length)];
+            }
+
+            addShape(col, row, path, color) {
+                const centerX = col * this.cellWidth + this.cellWidth/2;
+                const centerY = row * this.cellHeight + this.cellHeight/2;
+                
+                this.shapes.set(`${col},${row}`, {
+                    path: path,
+                    color: color,
+                    timestamp: Date.now(),
+                    state: 'drawing',  // states: drawing -> filling -> shrinking -> done
+                    center: { x: centerX, y: centerY }
+                });
+            }
+
+            getShapeState(timestamp) {
+                const age = Date.now() - timestamp;
+                if (age < 1000) return { state: 'drawing', progress: age / 1000 };
+                if (age < 3000) return { state: 'filling', progress: (age - 1000) / 2000 };
+                if (age < 5000) return { state: 'shrinking', progress: (age - 3000) / 2000 };
+                return { state: 'done', progress: 1 };
+            }
+
+            drawShapes(ctx) {
+                this.shapes.forEach((data, key) => {
+                    const { state, progress } = this.getShapeState(data.timestamp);
+                    
+                    if (state === 'done') {
+                        this.shapes.delete(key);
+                        return;
+                    }
+
+                    const path = data.path;
+                    if (path.length < 2) return;
+
+                    ctx.save();
+                    
+                    if (state === 'drawing') {
+                        // Draw outline with glow
+                        ctx.beginPath();
+                        ctx.strokeStyle = data.color;
+                        ctx.lineWidth = 4;
+                        ctx.globalAlpha = 0.2;
+                        ctx.moveTo(path[0].x, path[0].y);
+                        for (let i = 1; i < path.length * progress; i++) {
+                            ctx.lineTo(path[i].x, path[i].y);
+                        }
+                        ctx.stroke();
+
+                        // Draw main line
+                        ctx.beginPath();
+                        ctx.strokeStyle = data.color;
+                        ctx.lineWidth = 2;
+                        ctx.globalAlpha = 1;
+                        ctx.moveTo(path[0].x, path[0].y);
+                        for (let i = 1; i < path.length * progress; i++) {
+                            ctx.lineTo(path[i].x, path[i].y);
+                        }
+                        ctx.stroke();
+                    } else if (state === 'filling') {
+                        // Draw filled shape with increasing opacity
+                        ctx.beginPath();
+                        ctx.moveTo(path[0].x, path[0].y);
+                        for (let i = 1; i < path.length; i++) {
+                            ctx.lineTo(path[i].x, path[i].y);
+                        }
+                        ctx.closePath();
+                        
+                        ctx.fillStyle = data.color;
+                        ctx.globalAlpha = progress * 0.3;  // Max fill opacity
+                        ctx.fill();
+                        
+                        ctx.strokeStyle = data.color;
+                        ctx.lineWidth = 2;
+                        ctx.globalAlpha = 1;
+                        ctx.stroke();
+                    } else if (state === 'shrinking') {
+                        // Shrink to center point
+                        ctx.beginPath();
+                        const scale = 1 - progress;
+                        
+                        // Transform around center point
+                        ctx.translate(data.center.x, data.center.y);
+                        ctx.scale(scale, scale);
+                        ctx.translate(-data.center.x, -data.center.y);
+                        
+                        ctx.moveTo(path[0].x, path[0].y);
+                        for (let i = 1; i < path.length; i++) {
+                            ctx.lineTo(path[i].x, path[i].y);
+                        }
+                        ctx.closePath();
+                        
+                        ctx.fillStyle = data.color;
+                        ctx.globalAlpha = 0.3 * (1 - progress);
+                        ctx.fill();
+                        
+                        ctx.strokeStyle = data.color;
+                        ctx.lineWidth = 2 * (1 - progress);
+                        ctx.globalAlpha = 1 - progress;
+                        ctx.stroke();
+                    }
+                    
+                    ctx.restore();
+                });
+            }
+        }
+
+        class Robot {
+            constructor(color) {
+                this.color = color;
+                this.currentPath = [];
+                this.isDrawing = false;
+                this.commands = [];
+                this.commandIndex = 0;
+                this.moveStart = null;
+                this.moveTarget = null;
+                this.VELOCITY = 300;
+                this.col = 0;
+                this.row = 0;
+            }
+
+            generateShape(pos) {
+                const x = pos.col * gridManager.cellWidth + gridManager.cellWidth/2;
+                const y = pos.row * gridManager.cellHeight + gridManager.cellHeight/2;
+                this.col = pos.col;
+                this.row = pos.row;
+
+                const rotation = Math.random() * Math.PI * 2;
+                const maxSize = Math.min(gridManager.cellWidth, gridManager.cellHeight) * 0.95;
+                const size = maxSize * (0.7 + Math.random() * 0.3);
+
+                let points = [];
+                const shapeType = Math.floor(Math.random() * 3);
+
+                switch(shapeType) {
+                    case 0: // Circle
+                        const steps = 32;
+                        for (let i = 0; i <= steps; i++) {
+                            const angle = (i / steps) * Math.PI * 2 + rotation;
+                            points.push({
+                                x: x + (size/2) * Math.cos(angle),
+                                y: y + (size/2) * Math.sin(angle)
+                            });
+                        }
+                        break;
+
+                    case 1: // Square
+                        const half = size/2;
+                        [[-1,-1], [1,-1], [1,1], [-1,1], [-1,-1]].forEach(([px, py]) => {
+                            const rx = px * half;
+                            const ry = py * half;
+                            points.push({
+                                x: x + rx * Math.cos(rotation) - ry * Math.sin(rotation),
+                                y: y + rx * Math.sin(rotation) + ry * Math.cos(rotation)
+                            });
+                        });
+                        break;
+
+                    case 2: // Triangle
+                        for (let i = 0; i <= 3; i++) {
+                            const angle = (i * 2 * Math.PI / 3) + rotation;
+                            points.push({
+                                x: x + size/2 * Math.cos(angle),
+                                y: y + size/2 * Math.sin(angle)
+                            });
+                        }
+                        break;
+                }
+
+                return points;
+            }
+
+            update() {
+                const pos = gridManager.getRandomAvailablePosition();
+                if (!pos) return;
+
+                const points = this.generateShape(pos);
+                this.currentPath = points;
+                gridManager.addShape(pos.col, pos.row, points, this.color);
+            }
+        }
+
+        const gridManager = new GridManager();
+        const robots = [
+            new Robot('#FF6B6B'),  // Red
+            new Robot('#4ECDC4'),  // Teal
+            new Robot('#45B7D1')   // Blue
+        ];
+
+        function animate() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            robots.forEach(robot => robot.update());
+            gridManager.drawShapes(ctx);
+
+            requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
